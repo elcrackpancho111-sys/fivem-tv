@@ -36,9 +36,11 @@
             color: #fff;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             flex-direction: column;
+            text-align: center;
+            padding: 20px;
         }
         .logo {
-            font-size: 48px;
+            font-size: 42px;
             font-weight: 800;
             letter-spacing: 6px;
             color: #00d2ff;
@@ -48,17 +50,27 @@
         .subtext {
             font-size: 14px;
             color: #7a7a95;
-            letter-spacing: 4px;
+            letter-spacing: 2px;
             text-transform: uppercase;
+            margin-top: 5px;
+        }
+        #logStatus {
+            font-size: 12px;
+            color: #ff5555;
+            margin-top: 15px;
+            font-family: monospace;
+            max-width: 800px;
+            word-break: break-all;
         }
     </style>
 </head>
 <body>
 
-    <!-- Pantalla de Standby -->
+    <!-- Pantalla de Standby / Depuración -->
     <div id="standbyScreen" class="full-screen standby">
         <div class="logo">SMART TV</div>
-        <div class="subtext">SEÑAL ESTABLECIDA</div>
+        <div class="subtext" id="mainStatusText">SEÑAL ESTABLECIDA</div>
+        <div id="logStatus">Esperando órdenes...</div>
     </div>
 
     <!-- Contenedor del vídeo nativo -->
@@ -70,68 +82,85 @@
         const standbyScreen = document.getElementById('standbyScreen');
         const playerContainer = document.getElementById('playerContainer');
         const videoEl = document.getElementById('nativeVideo');
+        const mainStatusText = document.getElementById('mainStatusText');
+        const logStatus = document.getElementById('logStatus');
         let currentVolume = 1.0;
 
-        --// Lista de servidores de respaldo oficiales de Piped API
         const pipedInstances = [
             "https://pipedapi.kavin.rocks/streams/",
             "https://pipedapi.privacy.com.de/streams/",
             "https://pipedapi.drgns.space/streams/"
         ];
 
+        function updateLog(text, isError = false) {
+            console.log("[DUI LOG] " + text);
+            logStatus.innerText = text;
+            logStatus.style.color = isError ? "#ff5555" : "#00ffcc";
+        }
+
         async function loadVideo(videoId) {
-            console.log("[DUI PLAYER] Solicitando streams limpios para vídeo ID:", videoId);
-            standbyScreen.style.display = 'none';
-            playerContainer.style.display = 'block';
+            updateLog(`Cargando ID: ${videoId}...`);
+            standbyScreen.style.display = 'flex';
+            playerContainer.style.display = 'none';
+            mainStatusText.innerText = "BUSCANDO STREAM LIMPIO...";
 
             let streamUrl = null;
 
             for (let i = 0; i < pipedInstances.length; i++) {
                 try {
-                    console.log(`[DUI PLAYER] Probando instancia Piped [${i}]: ${pipedInstances[i] + videoId}`);
-                    let response = await fetch(pipedInstances[i] + videoId);
+                    let targetUrl = pipedInstances[i] + videoId;
+                    updateLog(`Probando instancia [${i}]: ${targetUrl}`);
+                    
+                    let response = await fetch(targetUrl);
                     if (response.ok) {
                         let data = await response.json();
                         let stream = data.videoStreams?.find(s => s.url && s.videoOnly === false) || data.videoStreams?.[0];
                         if (stream && stream.url) {
                             streamUrl = stream.url;
-                            console.log("[DUI PLAYER] ¡Stream limpio obtenido con éxito!", streamUrl);
+                            updateLog(`¡Stream obtenido con éxito en instancia [${i}]!`);
                             break;
+                        } else {
+                            updateLog(`Instancia [${i}] respondió pero sin streams válidos.`, true);
                         }
+                    } else {
+                        updateLog(`Instancia [${i}] falló con código HTTP: ${response.status}`, true);
                     }
                 } catch (e) {
-                    console.log(`[DUI PLAYER] Instancia [${i}] no disponible, cambiando a siguiente...`);
+                    updateLog(`Excepción en instancia [${i}]: ${e.message}`, true);
                 }
             }
 
             if (streamUrl) {
+                standbyScreen.style.display = 'none';
+                playerContainer.style.display = 'block';
                 videoEl.src = streamUrl;
                 videoEl.volume = currentVolume;
-                videoEl.play().catch(err => console.log("[DUI PLAYER] Error al reproducir el flujo:", err));
+                videoEl.play().catch(err => {
+                    updateLog(`Error al reproducir elemento video: ${err.message}`, true);
+                });
             } else {
-                console.error("[DUI PLAYER ERROR] Todas las instancias de Piped fallaron para este vídeo.");
-                stopVideo();
+                mainStatusText.innerText = "ERROR: TODAS LAS INSTANCIAS FALLARON";
+                updateLog("No se pudo obtener el vídeo de ninguna API de Piped.", true);
             }
         }
 
         function stopVideo() {
-            console.log("[DUI PLAYER] Deteniendo reproducción y volviendo a standby.");
+            updateLog("Deteniendo reproducción...");
             videoEl.pause();
             videoEl.src = '';
             playerContainer.style.display = 'none';
             standbyScreen.style.display = 'flex';
+            mainStatusText.innerText = "SEÑAL ESTABLECIDA";
         }
 
         videoEl.addEventListener('ended', function() {
-            console.log("[DUI PLAYER] El vídeo ha finalizado de forma nativa.");
+            updateLog("El vídeo finalizó.");
             stopVideo();
         });
 
         window.addEventListener('message', function (event) {
             let data = event.data;
             if (!data) return;
-
-            console.log("[DUI PLAYER] Mensaje recibido desde el cliente FiveM:", data);
 
             if (data.type === "loadVideo" && data.videoId) {
                 loadVideo(data.videoId);
