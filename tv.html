@@ -71,12 +71,14 @@
 </head>
 <body>
 
-    <div id="standbyScreen" class="full-screen standby" style="display: none;">
+    <!-- Pantalla de Standby inicial -->
+    <div id="standbyScreen" class="full-screen standby">
         <div class="logo">SMART TV</div>
         <div class="subtext">SEÑAL ESTABLECIDA</div>
         <div class="pulse"></div>
     </div>
 
+    <!-- Contenedor del reproductor de YouTube -->
     <div id="playerContainer" class="full-screen" style="display: none;">
         <div id="player"></div>
     </div>
@@ -84,28 +86,33 @@
     <script src="https://www.youtube.com/iframe_api"></script>
 
     <script>
-        const urlParams = new URLSearchParams(window.location.search);
-        const videoId = urlParams.get('v');
-
-        const standbyScreen = document.getElementById('standbyScreen');
-        const playerContainer = document.getElementById('playerContainer');
-
-        if (videoId) {
-            playerContainer.style.display = 'block';
-        } else {
-            standbyScreen.style.display = 'flex';
-        }
-
         let player;
+        let apiReady = false;
+        let pendingVideoId = null;
 
         function onYouTubeIframeAPIReady() {
-            if (videoId) {
+            apiReady = true;
+            if (pendingVideoId) {
+                loadYouTubeVideo(pendingVideoId);
+            }
+        }
+
+        function loadYouTubeVideo(videoId) {
+            const standbyScreen = document.getElementById('standbyScreen');
+            const playerContainer = document.getElementById('playerContainer');
+
+            standbyScreen.style.display = 'none';
+            playerContainer.style.display = 'block';
+
+            if (player && typeof player.loadVideoById === 'function') {
+                player.loadVideoById(videoId);
+            } else {
                 player = new YT.Player('player', {
                     videoId: videoId,
                     playerVars: {
                         'autoplay': 1,
                         'controls': 0,
-                        'mute': 0,               // Audio activado gestionado por distancia
+                        'mute': 0,
                         'loop': 1,
                         'playlist': videoId,
                         'enablejsapi': 1,
@@ -116,28 +123,48 @@
                     events: {
                         'onReady': (event) => {
                             event.target.playVideo();
-                            event.target.setVolume(100);
                         }
                     }
                 });
             }
         }
 
-        // Recibir comandos de volumen y estado desde el cliente de FiveM (Audio 3D perfecto)
+        function showStandby() {
+            const standbyScreen = document.getElementById('standbyScreen');
+            const playerContainer = document.getElementById('playerContainer');
+
+            if (player && typeof player.stopVideo === 'function') {
+                player.stopVideo();
+            }
+            playerContainer.style.display = 'none';
+            standbyScreen.style.display = 'flex';
+        }
+
+        // Recibir comandos limpios desde FiveM mediante SendDuiMessage
         window.addEventListener('message', function(event) {
             let data = event.data;
-            if (!player) return;
+            if (!data) return;
 
-            if (data.type === "setVolume") {
-                if (typeof player.setVolume === 'function') {
+            if (data.type === "loadVideo") {
+                if (apiReady) {
+                    loadYouTubeVideo(data.videoId);
+                } else {
+                    pendingVideoId = data.videoId;
+                }
+            } else if (data.type === "standby") {
+                showStandby();
+            } else if (data.type === "setVolume") {
+                if (player && typeof player.setVolume === 'function') {
                     player.setVolume(data.volume);
                 }
             } else if (data.type === "pause") {
-                let state = player.getPlayerState();
-                if (state === 1) { // 1 = Reproduciendo
-                    player.pauseVideo();
-                } else {
-                    player.playVideo();
+                if (player && typeof player.getPlayerState === 'function') {
+                    let state = player.getPlayerState();
+                    if (state === 1) {
+                        player.pauseVideo();
+                    } else {
+                        player.playVideo();
+                    }
                 }
             }
         });
