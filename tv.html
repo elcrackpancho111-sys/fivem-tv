@@ -86,15 +86,13 @@
     <script src="https://www.youtube.com/iframe_api"></script>
 
     <script>
-        let player;
+        let player = null;
         let apiReady = false;
         let pendingVideoId = null;
 
         function onYouTubeIframeAPIReady() {
             apiReady = true;
-            if (pendingVideoId) {
-                loadYouTubeVideo(pendingVideoId);
-            }
+            console.log("YouTube API Ready");
         }
 
         function loadYouTubeVideo(videoId) {
@@ -106,6 +104,7 @@
 
             if (player && typeof player.loadVideoById === 'function') {
                 player.loadVideoById(videoId);
+                player.unMute();
             } else {
                 player = new YT.Player('player', {
                     videoId: videoId,
@@ -123,6 +122,7 @@
                     events: {
                         'onReady': (event) => {
                             event.target.playVideo();
+                            event.target.unMute();
                         }
                     }
                 });
@@ -133,14 +133,17 @@
             const standbyScreen = document.getElementById('standbyScreen');
             const playerContainer = document.getElementById('playerContainer');
 
+            // Detenemos el vídeo y vaciamos el reproductor para cortar el audio por completo
             if (player && typeof player.stopVideo === 'function') {
                 player.stopVideo();
+                player.clearVideo();
             }
+
             playerContainer.style.display = 'none';
             standbyScreen.style.display = 'flex';
         }
 
-        // Recibir comandos limpios desde FiveM mediante SendDuiMessage
+        // Receptor de mensajes de FiveM
         window.addEventListener('message', function(event) {
             let data = event.data;
             if (!data) return;
@@ -150,6 +153,13 @@
                     loadYouTubeVideo(data.videoId);
                 } else {
                     pendingVideoId = data.videoId;
+                    // Intento de respaldo si la API ya cargó pero falló el flag
+                    let checkInterval = setInterval(() => {
+                        if (typeof YT !== 'undefined' && YT.Player) {
+                            clearInterval(checkInterval);
+                            loadYouTubeVideo(data.videoId);
+                        }
+                    }, 500);
                 }
             } else if (data.type === "standby") {
                 showStandby();
@@ -160,7 +170,7 @@
             } else if (data.type === "pause") {
                 if (player && typeof player.getPlayerState === 'function') {
                     let state = player.getPlayerState();
-                    if (state === 1) {
+                    if (state === 1) { // 1 es reproduciendo (playing)
                         player.pauseVideo();
                     } else {
                         player.playVideo();
