@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TV Screen Player</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; overflow: hidden; background-color: #000; }
+        body, html { width: 100%; height: 100%; background: #000; }
+        .full-screen { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; display: flex; justify-content: center; align-items: center; }
+        #player { width: 100vw; height: 100vh; pointer-events: none; transform: scale(1.35); }
+        .standby { background: linear-gradient(135deg, #111425, #080911); color: #ffffff; font-family: Arial, sans-serif; flex-direction: column; }
+        .logo { font-size: 42px; font-weight: 800; letter-spacing: 5px; color: #00d2ff; text-shadow: 0 0 20px rgba(0, 210, 255, 0.5); margin-bottom: 8px; }
+        .subtext { font-size: 16px; color: #8a8aa3; letter-spacing: 3px; }
+        .pulse { width: 10px; height: 10px; background-color: #00ff88; border-radius: 50%; box-shadow: 0 0 12px #00ff88; margin-top: 25px; animation: pulseAnim 2s infinite; }
+        @keyframes pulseAnim { 0% { opacity: 0.3; transform: scale(0.9); } 50% { opacity: 1; transform: scale(1.2); } 100% { opacity: 0.3; transform: scale(0.9); } }
+    </style>
+</head>
+<body>
+    <div id="standbyScreen" class="full-screen standby" style="display: none;">
+        <div class="logo">SMART TV</div>
+        <div class="subtext">SEÑAL ESTABLECIDA</div>
+        <div class="pulse"></div>
+    </div>
+    <div id="playerContainer" class="full-screen" style="display: none;">
+        <div id="player"></div>
+    </div>
+
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const mode = urlParams.get('mode');
+        const videoId = urlParams.get('v');
+
+        const standbyScreen = document.getElementById('standbyScreen');
+        const playerContainer = document.getElementById('playerContainer');
+
+        if (mode === 'standby') {
+            standbyScreen.style.display = 'flex';
+        }
+
+        function onYouTubeIframeAPIReady() {
+            if (videoId) {
+                playerContainer.style.display = 'block';
+                new YT.Player('player', {
+                    videoId: videoId,
+                    playerVars: {
+                        'autoplay': 1,
+                        'controls': 0,
+                        'mute': 1,
+                        'loop': 1,
+                        'playlist': videoId,
+                        'enablejsapi': 1
+                    },
+                    events: {
+                        'onReady': (e) => e.target.playVideo()
+                    }
+                });
+            }
+        }
+    </script>
+</body>
+</html>
