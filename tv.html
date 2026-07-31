@@ -4,61 +4,88 @@
     <meta charset="UTF-8">
     <title>FiveM Piped TV</title>
     <style>
-        body, html {
+        * {
             margin: 0;
             padding: 0;
-            width: 100%;
-            height: 100%;
+            box-sizing: border-box;
+            background: #000;
             overflow: hidden;
-            background-color: #000;
         }
-        #player-container {
+        body, html {
             width: 100%;
             height: 100%;
+        }
+        .full-screen {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
             display: flex;
             justify-content: center;
             align-items: center;
         }
         iframe {
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
             border: none;
+        }
+        .standby {
+            background: linear-gradient(135deg, #0b0e14, #040508);
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            flex-direction: column;
+        }
+        .logo {
+            font-size: 48px;
+            font-weight: 800;
+            letter-spacing: 6px;
+            color: #00d2ff;
+            text-shadow: 0 0 25px rgba(0, 210, 255, 0.6);
+            margin-bottom: 8px;
+        }
+        .subtext {
+            font-size: 14px;
+            color: #7a7a95;
+            letter-spacing: 4px;
+            text-transform: uppercase;
         }
     </style>
 </head>
 <body>
-    <div id="player-container">
-        <!-- El iframe se cargará dinámicamente al recibir la URL -->
+
+    <!-- Pantalla de Standby -->
+    <div id="standbyScreen" class="full-screen standby">
+        <div class="logo">SMART TV</div>
+        <div class="subtext">SEÑAL ESTABLECIDA</div>
+    </div>
+
+    <!-- Contenedor del reproductor Piped -->
+    <div id="playerContainer" class="full-screen" style="display: none;">
         <iframe id="pipedFrame" src="" allow="autoplay; encrypted-media" allowfullscreen></iframe>
     </div>
 
     <script>
-        // Función inteligente para extraer el ID de YouTube desde cualquier formato de enlace
-        function extractYouTubeId(url) {
-            if (!url) return null;
-            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-            const match = url.match(regExp);
-            return (match && match[2].length === 11) ? match[2] : url;
-        }
+        const standbyScreen = document.getElementById('standbyScreen');
+        const playerContainer = document.getElementById('playerContainer');
+        const pipedFrame = document.getElementById('pipedFrame');
 
-        // Escucha las peticiones enviadas desde el cliente de FiveM (Lua)
         window.addEventListener('message', function (event) {
-            const data = event.data;
-            const iframe = document.getElementById('pipedFrame');
+            let data = event.data;
+            if (!data) return;
 
-            // Detecta cuando se manda a reproducir un vídeo (ajústalo según las variables de tu script Lua: data.url, data.link, etc.)
-            if (data.type === 'play' || data.url || data.link) {
-                const videoUrl = data.url || data.link || data.video;
-                const videoId = extractYouTubeId(videoUrl);
-                
-                if (videoId) {
-                    // Carga la instancia de Piped pasando el ID y ordenando la reproducción automática
-                    iframe.src = `https://piped.video/embed/${videoId}?autoplay=true`;
-                }
+            // Recibe la orden de cargar vídeo enviada desde client.lua
+            if (data.type === "loadVideo" && data.videoId) {
+                standbyScreen.style.display = 'none';
+                playerContainer.style.display = 'block';
+                // Carga la instancia de Piped libre de anuncios con el ID extraído
+                pipedFrame.src = `https://piped.video/embed/${data.videoId}?autoplay=1`;
             } 
-            // Detecta si se apaga la televisión o se detiene el vídeo
-            else if (data.type === 'stop' || data.type === 'close') {
-                iframe.src = ''; // Limpia el reproductor para detener el audio y vídeo
+            // Recibe la orden de detener o apagar (Standby)
+            else if (data.type === "standby") {
+                pipedFrame.src = ''; // Limpia el iframe para cortar el audio de raíz
+                playerContainer.style.display = 'none';
+                standbyScreen.style.display = 'flex';
             }
         });
     </script>
