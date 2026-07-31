@@ -3,30 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TV Screen Player</title>
+    <title>FiveM TV Player</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; overflow: hidden; background-color: #000; }
-        body, html { width: 100%; height: 100%; background: #000; }
-        .full-screen { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; display: flex; justify-content: center; align-items: center; }
-        #player { width: 100vw; height: 100vh; pointer-events: none; transform: scale(1.35); }
-        .standby { background: linear-gradient(135deg, #111425, #080911); color: #ffffff; font-family: Arial, sans-serif; flex-direction: column; }
-        .logo { font-size: 42px; font-weight: 800; letter-spacing: 5px; color: #00d2ff; text-shadow: 0 0 20px rgba(0, 210, 255, 0.5); margin-bottom: 8px; }
-        .subtext { font-size: 16px; color: #8a8aa3; letter-spacing: 3px; }
-        .pulse { width: 10px; height: 10px; background-color: #00ff88; border-radius: 50%; box-shadow: 0 0 12px #00ff88; margin-top: 25px; animation: pulseAnim 2s infinite; }
-        @keyframes pulseAnim { 0% { opacity: 0.3; transform: scale(0.9); } 50% { opacity: 1; transform: scale(1.2); } 100% { opacity: 0.3; transform: scale(0.9); } }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            overflow: hidden;
+            background-color: #000;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            background: #000;
+        }
+        .full-screen {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        /* Zoom ligero para ocultar bordes y logos de YouTube en las TVs */
+        #player {
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            transform: scale(1.35);
+        }
+        
+        /* DISEÑO DE LA PANTALLA EN STANDBY (MODO ESPERA) */
+        .standby {
+            background: linear-gradient(135deg, #0b0e14, #040508);
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            flex-direction: column;
+        }
+        .logo {
+            font-size: 48px;
+            font-weight: 800;
+            letter-spacing: 6px;
+            color: #00d2ff;
+            text-shadow: 0 0 25px rgba(0, 210, 255, 0.6);
+            margin-bottom: 8px;
+        }
+        .subtext {
+            font-size: 14px;
+            color: #7a7a95;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+        }
+        .pulse {
+            width: 12px;
+            height: 12px;
+            background-color: #00ff88;
+            border-radius: 50%;
+            box-shadow: 0 0 15px #00ff88;
+            margin-top: 30px;
+            animation: pulseAnim 2s infinite ease-in-out;
+        }
+        @keyframes pulseAnim {
+            0% { opacity: 0.3; transform: scale(0.8); }
+            50% { opacity: 1; transform: scale(1.2); }
+            100% { opacity: 0.3; transform: scale(0.8); }
+        }
     </style>
 </head>
 <body>
+
+    <!-- PANTALLA MODO STANDBY -->
     <div id="standbyScreen" class="full-screen standby" style="display: none;">
         <div class="logo">SMART TV</div>
         <div class="subtext">SEÑAL ESTABLECIDA</div>
         <div class="pulse"></div>
     </div>
+
+    <!-- REPRODUCTOR DE YOUTUBE -->
     <div id="playerContainer" class="full-screen" style="display: none;">
         <div id="player"></div>
     </div>
 
+    <!-- CARGA DE LA API OFICIAL DE YOUTUBE -->
     <script src="https://www.youtube.com/iframe_api"></script>
+
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const mode = urlParams.get('mode');
@@ -35,25 +97,35 @@
         const standbyScreen = document.getElementById('standbyScreen');
         const playerContainer = document.getElementById('playerContainer');
 
-        if (mode === 'standby') {
+        // Si se le pasa un ID de video, activa el contenedor del reproductor
+        // Si no se le pasa video o está en modo standby, muestra la pantalla azul
+        if (videoId) {
+            playerContainer.style.display = 'block';
+        } else {
             standbyScreen.style.display = 'flex';
         }
 
+        // Función ejecutada automáticamente cuando la API de YouTube carga
         function onYouTubeIframeAPIReady() {
             if (videoId) {
-                playerContainer.style.display = 'block';
                 new YT.Player('player', {
                     videoId: videoId,
                     playerVars: {
                         'autoplay': 1,
                         'controls': 0,
-                        'mute': 1,
+                        'mute': 1,               // Silenciado en vídeo (el audio lo reproduce xSound)
                         'loop': 1,
-                        'playlist': videoId,
-                        'enablejsapi': 1
+                        'playlist': videoId,     // Necesario para que el loop funcione en YouTube
+                        'enablejsapi': 1,
+                        'rel': 0,
+                        'showinfo': 0,
+                        'iv_load_policy': 3,
+                        'modestbranding': 1
                     },
                     events: {
-                        'onReady': (e) => e.target.playVideo()
+                        'onReady': (event) => {
+                            event.target.playVideo();
+                        }
                     }
                 });
             }
