@@ -114,7 +114,6 @@
                 player.setVolume(currentVolume);
                 player.unMute();
             } else {
-                // Recreamos el elemento contenedor del reproductor para asegurar que no queden rastros de audio previos
                 const wrapper = document.getElementById('player-wrapper');
                 wrapper.innerHTML = '<div id="player"></div>';
 
@@ -124,18 +123,23 @@
                         'autoplay': 1,
                         'controls': 0,
                         'mute': 0,
-                        'loop': 1,
-                        'playlist': videoId,
                         'enablejsapi': 1,
                         'rel': 0,
                         'iv_load_policy': 3,
                         'modestbranding': 1
+                        // Se eliminaron 'loop' y 'playlist' para evitar el bucle infinito
                     },
                     events: {
                         'onReady': (event) => {
                             event.target.setVolume(currentVolume);
                             event.target.playVideo();
                             event.target.unMute();
+                        },
+                        'onStateChange': (event) => {
+                            // 0 significa que el vídeo ha terminado (ENDED)
+                            if (event.data === 0) {
+                                showStandby();
+                            }
                         }
                     }
                 });
@@ -146,7 +150,6 @@
             const standbyScreen = document.getElementById('standbyScreen');
             const playerContainer = document.getElementById('playerContainer');
 
-            // Destruimos el reproductor por completo para cortar cualquier rastro de audio en segundo plano
             if (player) {
                 try {
                     player.stopVideo();
@@ -186,7 +189,7 @@
             } else if (data.type === "pause") {
                 if (player && typeof player.getPlayerState === 'function') {
                     let state = player.getPlayerState();
-                    if (state === 1) { // 1 = Reproduciendo
+                    if (state === 1) {
                         player.pauseVideo();
                     } else {
                         player.playVideo();
