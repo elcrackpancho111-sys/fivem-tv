@@ -2,199 +2,63 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FiveM TV Player</title>
+    <title>FiveM Piped TV</title>
     <style>
-        * {
+        body, html {
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
+            width: 100%;
+            height: 100%;
             overflow: hidden;
             background-color: #000;
         }
-        body, html {
+        #player-container {
             width: 100%;
             height: 100%;
-            background: #000;
-        }
-        .full-screen {
-            width: 100vw;
-            height: 100vh;
-            position: absolute;
-            top: 0;
-            left: 0;
             display: flex;
             justify-content: center;
             align-items: center;
         }
-        #player-wrapper {
-            width: 100vw;
-            height: 100vh;
-            position: relative;
-        }
-        #player {
-            width: 100vw;
-            height: 100vh;
-            pointer-events: none;
-            transform: scale(1.35);
-        }
-        .standby {
-            background: linear-gradient(135deg, #0b0e14, #040508);
-            color: #ffffff;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            flex-direction: column;
-        }
-        .logo {
-            font-size: 48px;
-            font-weight: 800;
-            letter-spacing: 6px;
-            color: #00d2ff;
-            text-shadow: 0 0 25px rgba(0, 210, 255, 0.6);
-            margin-bottom: 8px;
-        }
-        .subtext {
-            font-size: 14px;
-            color: #7a7a95;
-            letter-spacing: 4px;
-            text-transform: uppercase;
-        }
-        .pulse {
-            width: 12px;
-            height: 12px;
-            background-color: #00ff88;
-            border-radius: 50%;
-            box-shadow: 0 0 15px #00ff88;
-            margin-top: 30px;
-            animation: pulseAnim 2s infinite ease-in-out;
-        }
-        @keyframes pulseAnim {
-            0% { opacity: 0.3; transform: scale(0.8); }
-            50% { opacity: 1; transform: scale(1.2); }
-            100% { opacity: 0.3; transform: scale(0.8); }
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
         }
     </style>
 </head>
 <body>
-
-    <!-- Pantalla de Standby inicial -->
-    <div id="standbyScreen" class="full-screen standby">
-        <div class="logo">SMART TV</div>
-        <div class="subtext">SEÑAL ESTABLECIDA</div>
-        <div class="pulse"></div>
+    <div id="player-container">
+        <!-- El iframe se cargará dinámicamente al recibir la URL -->
+        <iframe id="pipedFrame" src="" allow="autoplay; encrypted-media" allowfullscreen></iframe>
     </div>
-
-    <!-- Contenedor del reproductor de YouTube -->
-    <div id="playerContainer" class="full-screen" style="display: none;">
-        <div id="player-wrapper">
-            <div id="player"></div>
-        </div>
-    </div>
-
-    <script src="https://www.youtube.com/iframe_api"></script>
 
     <script>
-        let player = null;
-        let apiReady = false;
-        let pendingVideoId = null;
-        let currentVolume = 100;
-
-        function onYouTubeIframeAPIReady() {
-            apiReady = true;
+        // Función inteligente para extraer el ID de YouTube desde cualquier formato de enlace
+        function extractYouTubeId(url) {
+            if (!url) return null;
+            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+            const match = url.match(regExp);
+            return (match && match[2].length === 11) ? match[2] : url;
         }
 
-        function loadYouTubeVideo(videoId) {
-            const standbyScreen = document.getElementById('standbyScreen');
-            const playerContainer = document.getElementById('playerContainer');
+        // Escucha las peticiones enviadas desde el cliente de FiveM (Lua)
+        window.addEventListener('message', function (event) {
+            const data = event.data;
+            const iframe = document.getElementById('pipedFrame');
 
-            standbyScreen.style.display = 'none';
-            playerContainer.style.display = 'block';
-
-            if (player && typeof player.loadVideoById === 'function') {
-                player.loadVideoById(videoId);
-                player.setVolume(currentVolume);
-                player.unMute();
-            } else {
-                const wrapper = document.getElementById('player-wrapper');
-                wrapper.innerHTML = '<div id="player"></div>';
-
-                player = new YT.Player('player', {
-                    videoId: videoId,
-                    playerVars: {
-                        'autoplay': 1,
-                        'controls': 0,
-                        'mute': 0,
-                        'enablejsapi': 1,
-                        'rel': 0,
-                        'iv_load_policy': 3,
-                        'modestbranding': 1
-                        // Se eliminaron 'loop' y 'playlist' para evitar el bucle infinito
-                    },
-                    events: {
-                        'onReady': (event) => {
-                            event.target.setVolume(currentVolume);
-                            event.target.playVideo();
-                            event.target.unMute();
-                        },
-                        'onStateChange': (event) => {
-                            // 0 significa que el vídeo ha terminado (ENDED)
-                            if (event.data === 0) {
-                                showStandby();
-                            }
-                        }
-                    }
-                });
-            }
-        }
-
-        function showStandby() {
-            const standbyScreen = document.getElementById('standbyScreen');
-            const playerContainer = document.getElementById('playerContainer');
-
-            if (player) {
-                try {
-                    player.stopVideo();
-                    player.destroy();
-                } catch (e) {}
-                player = null;
-            }
-
-            playerContainer.style.display = 'none';
-            standbyScreen.style.display = 'flex';
-        }
-
-        // Receptor de mensajes de FiveM
-        window.addEventListener('message', function(event) {
-            let data = event.data;
-            if (!data) return;
-
-            if (data.type === "loadVideo") {
-                if (apiReady) {
-                    loadYouTubeVideo(data.videoId);
-                } else {
-                    pendingVideoId = data.videoId;
-                    let checkInterval = setInterval(() => {
-                        if (typeof YT !== 'undefined' && YT.Player) {
-                            clearInterval(checkInterval);
-                            loadYouTubeVideo(data.videoId);
-                        }
-                    }, 500);
+            // Detecta cuando se manda a reproducir un vídeo (ajústalo según las variables de tu script Lua: data.url, data.link, etc.)
+            if (data.type === 'play' || data.url || data.link) {
+                const videoUrl = data.url || data.link || data.video;
+                const videoId = extractYouTubeId(videoUrl);
+                
+                if (videoId) {
+                    // Carga la instancia de Piped pasando el ID y ordenando la reproducción automática
+                    iframe.src = `https://piped.video/embed/${videoId}?autoplay=true`;
                 }
-            } else if (data.type === "standby") {
-                showStandby();
-            } else if (data.type === "setVolume") {
-                currentVolume = Number(data.volume) || 0;
-                if (player && typeof player.setVolume === 'function') {
-                    player.setVolume(currentVolume);
-                }
-            } else if (data.type === "pause") {
-                if (player && typeof player.getPlayerState === 'function') {
-                    let state = player.getPlayerState();
-                    if (state === 1) {
-                        player.pauseVideo();
-                    } else {
-                        player.playVideo();
-                    }
-                }
+            } 
+            // Detecta si se apaga la televisión o se detiene el vídeo
+            else if (data.type === 'stop' || data.type === 'close') {
+                iframe.src = ''; // Limpia el reproductor para detener el audio y vídeo
             }
         });
     </script>
