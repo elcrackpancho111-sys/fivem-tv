@@ -27,6 +27,11 @@
             justify-content: center;
             align-items: center;
         }
+        #player-wrapper {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
         #player {
             width: 100vw;
             height: 100vh;
@@ -80,7 +85,9 @@
 
     <!-- Contenedor del reproductor de YouTube -->
     <div id="playerContainer" class="full-screen" style="display: none;">
-        <div id="player"></div>
+        <div id="player-wrapper">
+            <div id="player"></div>
+        </div>
     </div>
 
     <script src="https://www.youtube.com/iframe_api"></script>
@@ -89,10 +96,10 @@
         let player = null;
         let apiReady = false;
         let pendingVideoId = null;
+        let currentVolume = 100;
 
         function onYouTubeIframeAPIReady() {
             apiReady = true;
-            console.log("YouTube API Ready");
         }
 
         function loadYouTubeVideo(videoId) {
@@ -104,8 +111,13 @@
 
             if (player && typeof player.loadVideoById === 'function') {
                 player.loadVideoById(videoId);
+                player.setVolume(currentVolume);
                 player.unMute();
             } else {
+                // Recreamos el elemento contenedor del reproductor para asegurar que no queden rastros de audio previos
+                const wrapper = document.getElementById('player-wrapper');
+                wrapper.innerHTML = '<div id="player"></div>';
+
                 player = new YT.Player('player', {
                     videoId: videoId,
                     playerVars: {
@@ -121,6 +133,7 @@
                     },
                     events: {
                         'onReady': (event) => {
+                            event.target.setVolume(currentVolume);
                             event.target.playVideo();
                             event.target.unMute();
                         }
@@ -133,10 +146,13 @@
             const standbyScreen = document.getElementById('standbyScreen');
             const playerContainer = document.getElementById('playerContainer');
 
-            // Detenemos el vídeo y vaciamos el reproductor para cortar el audio por completo
-            if (player && typeof player.stopVideo === 'function') {
-                player.stopVideo();
-                player.clearVideo();
+            // Destruimos el reproductor por completo para cortar cualquier rastro de audio en segundo plano
+            if (player) {
+                try {
+                    player.stopVideo();
+                    player.destroy();
+                } catch (e) {}
+                player = null;
             }
 
             playerContainer.style.display = 'none';
@@ -153,7 +169,6 @@
                     loadYouTubeVideo(data.videoId);
                 } else {
                     pendingVideoId = data.videoId;
-                    // Intento de respaldo si la API ya cargó pero falló el flag
                     let checkInterval = setInterval(() => {
                         if (typeof YT !== 'undefined' && YT.Player) {
                             clearInterval(checkInterval);
@@ -164,13 +179,14 @@
             } else if (data.type === "standby") {
                 showStandby();
             } else if (data.type === "setVolume") {
+                currentVolume = Number(data.volume) || 0;
                 if (player && typeof player.setVolume === 'function') {
-                    player.setVolume(data.volume);
+                    player.setVolume(currentVolume);
                 }
             } else if (data.type === "pause") {
                 if (player && typeof player.getPlayerState === 'function') {
                     let state = player.getPlayerState();
-                    if (state === 1) { // 1 es reproduciendo (playing)
+                    if (state === 1) { // 1 = Reproduciendo
                         player.pauseVideo();
                     } else {
                         player.playVideo();
