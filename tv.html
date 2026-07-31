@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>FiveM Piped TV</title>
+    <title>FiveM Native Piped TV</title>
     <style>
         * {
             margin: 0;
@@ -25,10 +25,11 @@
             justify-content: center;
             align-items: center;
         }
-        iframe {
+        video {
             width: 100vw;
             height: 100vh;
-            border: none;
+            object-fit: cover;
+            pointer-events: none;
         }
         .standby {
             background: linear-gradient(135deg, #0b0e14, #040508);
@@ -60,32 +61,72 @@
         <div class="subtext">SEÑAL ESTABLECIDA</div>
     </div>
 
-    <!-- Contenedor del reproductor Piped -->
+    <!-- Contenedor del vídeo nativo -->
     <div id="playerContainer" class="full-screen" style="display: none;">
-        <iframe id="pipedFrame" src="" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+        <video id="nativeVideo" autoplay playsinline></video>
     </div>
 
     <script>
         const standbyScreen = document.getElementById('standbyScreen');
         const playerContainer = document.getElementById('playerContainer');
-        const pipedFrame = document.getElementById('pipedFrame');
+        const videoEl = document.getElementById('nativeVideo');
+        let currentVolume = 1.0;
 
+        async function loadVideo(videoId) {
+            try {
+                standbyScreen.style.display = 'none';
+                playerContainer.style.display = 'block';
+
+                // Consultamos la API pública de Piped para extraer el stream limpio de anuncios
+                let response = await fetch(`https://pipedapi.kavin.rocks/streams/${videoId}`);
+                let data = await response.json();
+
+                // Buscamos un formato de vídeo que incluya audio y vídeo combinados
+                let stream = data.videoStreams.find(s => s.url && s.videoOnly === false) || data.videoStreams[0];
+
+                if (stream && stream.url) {
+                    videoEl.src = stream.url;
+                    videoEl.volume = currentVolume;
+                    videoEl.play();
+                } else {
+                    console.error("No se encontró un enlace de stream válido.");
+                }
+            } catch (e) {
+                console.error("Error al conectar con la API de Piped:", e);
+            }
+        }
+
+        function stopVideo() {
+            videoEl.pause();
+            videoEl.src = '';
+            playerContainer.style.display = 'none';
+            standbyScreen.style.display = 'flex';
+        }
+
+        // Detectar cuando el vídeo termina de forma nativa para volver al standby
+        videoEl.addEventListener('ended', function() {
+            stopVideo();
+        });
+
+        // Receptor de mensajes de FiveM
         window.addEventListener('message', function (event) {
             let data = event.data;
             if (!data) return;
 
-            // Recibe la orden de cargar vídeo enviada desde client.lua
             if (data.type === "loadVideo" && data.videoId) {
-                standbyScreen.style.display = 'none';
-                playerContainer.style.display = 'block';
-                // Carga la instancia de Piped libre de anuncios con el ID extraído
-                pipedFrame.src = `https://piped.video/embed/${data.videoId}?autoplay=1`;
-            } 
-            // Recibe la orden de detener o apagar (Standby)
-            else if (data.type === "standby") {
-                pipedFrame.src = ''; // Limpia el iframe para cortar el audio de raíz
-                playerContainer.style.display = 'none';
-                standbyScreen.style.display = 'flex';
+                loadVideo(data.videoId);
+            } else if (data.type === "standby") {
+                stopVideo();
+            } else if (data.type === "setVolume") {
+                // FiveM envía de 0 a 100, la etiqueta video requiere de 0.0 a 1.0
+                currentVolume = (Number(data.volume) || 0) / 100;
+                videoEl.volume = currentVolume;
+            } else if (data.type === "pause") {
+                if (videoEl.paused) {
+                    videoEl.play();
+                } else {
+                    videoEl.pause();
+                }
             }
         });
     </script>
