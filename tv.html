@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>FiveM Piped Native TV</title>
+    <title>FiveM Piped Native TV Player</title>
     <style>
         * {
             margin: 0;
@@ -72,7 +72,7 @@
         const videoEl = document.getElementById('nativeVideo');
         let currentVolume = 1.0;
 
-        // Lista de servidores de respaldo oficiales de Piped (si uno falla, prueba el siguiente)
+        --// Lista de servidores de respaldo oficiales de Piped API
         const pipedInstances = [
             "https://pipedapi.kavin.rocks/streams/",
             "https://pipedapi.privacy.com.de/streams/",
@@ -80,62 +80,64 @@
         ];
 
         async function loadVideo(videoId) {
+            console.log("[DUI PLAYER] Solicitando streams limpios para vídeo ID:", videoId);
             standbyScreen.style.display = 'none';
             playerContainer.style.display = 'block';
 
             let streamUrl = null;
 
-            // Intentar conectar con las diferentes instancias hasta que una responda con éxito
             for (let i = 0; i < pipedInstances.length; i++) {
                 try {
+                    console.log(`[DUI PLAYER] Probando instancia Piped [${i}]: ${pipedInstances[i] + videoId}`);
                     let response = await fetch(pipedInstances[i] + videoId);
                     if (response.ok) {
                         let data = await response.json();
-                        // Buscar un flujo que combine vídeo y audio limpios de anuncios
                         let stream = data.videoStreams?.find(s => s.url && s.videoOnly === false) || data.videoStreams?.[0];
                         if (stream && stream.url) {
                             streamUrl = stream.url;
-                            break; // ¡Encontrado! Salimos del bucle
+                            console.log("[DUI PLAYER] ¡Stream limpio obtenido con éxito!", streamUrl);
+                            break;
                         }
                     }
                 } catch (e) {
-                    console.log(`Instancia ${i} falló, intentando siguiente...`);
+                    console.log(`[DUI PLAYER] Instancia [${i}] no disponible, cambiando a siguiente...`);
                 }
             }
 
             if (streamUrl) {
                 videoEl.src = streamUrl;
                 videoEl.volume = currentVolume;
-                videoEl.play().catch(err => console.log("Error al reproducir el stream:", err));
+                videoEl.play().catch(err => console.log("[DUI PLAYER] Error al reproducir el flujo:", err));
             } else {
-                console.error("Todas las instancias de Piped fallaron para este vídeo.");
+                console.error("[DUI PLAYER ERROR] Todas las instancias de Piped fallaron para este vídeo.");
                 stopVideo();
             }
         }
 
         function stopVideo() {
+            console.log("[DUI PLAYER] Deteniendo reproducción y volviendo a standby.");
             videoEl.pause();
             videoEl.src = '';
             playerContainer.style.display = 'none';
             standbyScreen.style.display = 'flex';
         }
 
-        // Detectar cuando el vídeo termina de forma nativa para volver al standby
         videoEl.addEventListener('ended', function() {
+            console.log("[DUI PLAYER] El vídeo ha finalizado de forma nativa.");
             stopVideo();
         });
 
-        // Receptor de mensajes de FiveM (cliente Lua)
         window.addEventListener('message', function (event) {
             let data = event.data;
             if (!data) return;
+
+            console.log("[DUI PLAYER] Mensaje recibido desde el cliente FiveM:", data);
 
             if (data.type === "loadVideo" && data.videoId) {
                 loadVideo(data.videoId);
             } else if (data.type === "standby") {
                 stopVideo();
             } else if (data.type === "setVolume") {
-                // FiveM envía de 0 a 100, la etiqueta video requiere de 0.0 a 1.0
                 currentVolume = (Number(data.volume) || 0) / 100;
                 videoEl.volume = currentVolume;
             } else if (data.type === "pause") {
