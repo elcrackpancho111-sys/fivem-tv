@@ -3,197 +3,109 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FiveM TV Player</title>
+    <title>FiveM TV Player - AdFree</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            overflow: hidden;
-            background-color: #000;
-        }
-        body, html {
-            width: 100%;
-            height: 100%;
-            background: #000;
-        }
-        .full-screen {
-            width: 100vw;
-            height: 100vh;
-            position: absolute;
-            top: 0;
-            left: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        #player-wrapper {
-            width: 100vw;
-            height: 100vh;
-            position: relative;
-        }
-        #player {
-            width: 100vw;
-            height: 100vh;
-            pointer-events: none;
-            transform: scale(1.35);
-        }
-        .standby {
-            background: linear-gradient(135deg, #0b0e14, #040508);
-            color: #ffffff;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            flex-direction: column;
-        }
-        .logo {
-            font-size: 48px;
-            font-weight: 800;
-            letter-spacing: 6px;
-            color: #00d2ff;
-            text-shadow: 0 0 25px rgba(0, 210, 255, 0.6);
-            margin-bottom: 8px;
-        }
-        .subtext {
-            font-size: 14px;
-            color: #7a7a95;
-            letter-spacing: 4px;
-            text-transform: uppercase;
-        }
-        .pulse {
-            width: 12px;
-            height: 12px;
-            background-color: #00ff88;
-            border-radius: 50%;
-            box-shadow: 0 0 15px #00ff88;
-            margin-top: 30px;
-            animation: pulseAnim 2s infinite ease-in-out;
-        }
-        @keyframes pulseAnim {
-            0% { opacity: 0.3; transform: scale(0.8); }
-            50% { opacity: 1; transform: scale(1.2); }
-            100% { opacity: 0.3; transform: scale(0.8); }
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; overflow: hidden; background-color: #000; }
+        body, html { width: 100%; height: 100%; background: #000; }
+        .full-screen { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; display: flex; justify-content: center; align-items: center; }
+        #player-wrapper { width: 100vw; height: 100vh; position: relative; }
+        
+        .standby { background: linear-gradient(135deg, #0b0e14, #040508); color: #ffffff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; flex-direction: column; }
+        .logo { font-size: 48px; font-weight: 800; letter-spacing: 6px; color: #00d2ff; text-shadow: 0 0 25px rgba(0, 210, 255, 0.6); margin-bottom: 8px; }
+        .subtext { font-size: 14px; color: #7a7a95; letter-spacing: 4px; text-transform: uppercase; }
+        .pulse { width: 12px; height: 12px; background-color: #00ff88; border-radius: 50%; box-shadow: 0 0 15px #00ff88; margin-top: 30px; animation: pulseAnim 2s infinite ease-in-out; }
+        @keyframes pulseAnim { 0% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } 100% { opacity: 0.3; transform: scale(0.8); } }
     </style>
 </head>
 <body>
-
-    <!-- Pantalla de Standby inicial -->
     <div id="standbyScreen" class="full-screen standby">
         <div class="logo">SMART TV</div>
         <div class="subtext">SEÑAL ESTABLECIDA</div>
         <div class="pulse"></div>
     </div>
-
-    <!-- Contenedor del reproductor de YouTube -->
     <div id="playerContainer" class="full-screen" style="display: none;">
         <div id="player-wrapper">
-            <div id="player"></div>
+            <!-- El video HTML5 se inyectará aquí -->
         </div>
     </div>
 
-    <script src="https://www.youtube.com/iframe_api"></script>
-
     <script>
-        let player = null;
-        let apiReady = false;
-        let pendingVideoId = null;
-        let currentVolume = 100;
+        let localPlayer = null;
+        let currentVolume = 1.0; // En HTML5 el volumen va de 0.0 a 1.0
 
-        function onYouTubeIframeAPIReady() {
-            apiReady = true;
-        }
-
-        function loadYouTubeVideo(videoId) {
+        async function loadAdFreeVideo(videoId, startSeconds = 0) {
             const standbyScreen = document.getElementById('standbyScreen');
             const playerContainer = document.getElementById('playerContainer');
+            const wrapper = document.getElementById('player-wrapper');
 
             standbyScreen.style.display = 'none';
             playerContainer.style.display = 'block';
 
-            if (player && typeof player.loadVideoById === 'function') {
-                player.loadVideoById(videoId);
-                player.setVolume(currentVolume);
-                player.unMute();
-            } else {
-                const wrapper = document.getElementById('player-wrapper');
-                wrapper.innerHTML = '<div id="player"></div>';
+            try {
+                // Usar la API de Yewtu.be (instancia Invidious) para sacar el MP4 directo
+                const response = await fetch(`https://yewtu.be/api/v1/videos/${videoId}`);
+                const data = await response.json();
+                
+                let streamUrl = "";
+                // Extraemos la primera URL de stream (MP4) válida
+                if (data.formatStreams && data.formatStreams.length > 0) {
+                    streamUrl = data.formatStreams[0].url;
+                } else {
+                    throw new Error("No se encontraron streams válidos");
+                }
 
-                player = new YT.Player('player', {
-                    videoId: videoId,
-                    playerVars: {
-                        'autoplay': 1,
-                        'controls': 0,
-                        'mute': 0,
-                        'enablejsapi': 1,
-                        'rel': 0,
-                        'iv_load_policy': 3,
-                        'modestbranding': 1
-                        // Se eliminaron 'loop' y 'playlist' para evitar el bucle infinito
-                    },
-                    events: {
-                        'onReady': (event) => {
-                            event.target.setVolume(currentVolume);
-                            event.target.playVideo();
-                            event.target.unMute();
-                        },
-                        'onStateChange': (event) => {
-                            // 0 significa que el vídeo ha terminado (ENDED)
-                            if (event.data === 0) {
-                                showStandby();
-                            }
-                        }
-                    }
-                });
+                wrapper.innerHTML = `<video id="htmlPlayer" style="width: 100vw; height: 100vh; object-fit: cover; transform: scale(1.05);"></video>`;
+                localPlayer = document.getElementById('htmlPlayer');
+                
+                localPlayer.src = streamUrl;
+                localPlayer.currentTime = startSeconds;
+                localPlayer.volume = currentVolume;
+                
+                // Si el video termina, volver a Standby
+                localPlayer.onended = () => { showStandby(); };
+                
+                // Forzar reproducción
+                let playPromise = localPlayer.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(e => console.log("Reproducción automática bloqueada:", e));
+                }
+            } catch (error) {
+                console.error("Error cargando video sin anuncios:", error);
+                showStandby();
             }
         }
 
         function showStandby() {
             const standbyScreen = document.getElementById('standbyScreen');
             const playerContainer = document.getElementById('playerContainer');
-
-            if (player) {
-                try {
-                    player.stopVideo();
-                    player.destroy();
-                } catch (e) {}
-                player = null;
+            
+            if (localPlayer) {
+                localPlayer.pause();
+                localPlayer.removeAttribute('src');
+                localPlayer.load();
+                localPlayer = null;
             }
-
+            
             playerContainer.style.display = 'none';
             standbyScreen.style.display = 'flex';
         }
 
-        // Receptor de mensajes de FiveM
         window.addEventListener('message', function(event) {
             let data = event.data;
             if (!data) return;
 
             if (data.type === "loadVideo") {
-                if (apiReady) {
-                    loadYouTubeVideo(data.videoId);
-                } else {
-                    pendingVideoId = data.videoId;
-                    let checkInterval = setInterval(() => {
-                        if (typeof YT !== 'undefined' && YT.Player) {
-                            clearInterval(checkInterval);
-                            loadYouTubeVideo(data.videoId);
-                        }
-                    }, 500);
-                }
+                loadAdFreeVideo(data.videoId, data.startSeconds);
             } else if (data.type === "standby") {
                 showStandby();
             } else if (data.type === "setVolume") {
-                currentVolume = Number(data.volume) || 0;
-                if (player && typeof player.setVolume === 'function') {
-                    player.setVolume(currentVolume);
-                }
+                // Convertir de 0-100 (FiveM) a 0.0-1.0 (HTML5)
+                currentVolume = (Number(data.volume) || 0) / 100;
+                if (localPlayer) localPlayer.volume = currentVolume;
             } else if (data.type === "pause") {
-                if (player && typeof player.getPlayerState === 'function') {
-                    let state = player.getPlayerState();
-                    if (state === 1) {
-                        player.pauseVideo();
-                    } else {
-                        player.playVideo();
-                    }
+                if (localPlayer) {
+                    if (localPlayer.paused) localPlayer.play();
+                    else localPlayer.pause();
                 }
             }
         });
