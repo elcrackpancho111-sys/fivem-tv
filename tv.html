@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FiveM TV Player - AdFree</title>
+    <title>FiveM TV Player</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; overflow: hidden; background-color: #000; }
         body, html { width: 100%; height: 100%; background: #000; }
         .full-screen { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; display: flex; justify-content: center; align-items: center; }
-        #player-wrapper { width: 100vw; height: 100vh; position: relative; }
+        #player-wrapper { width: 100vw; height: 100vh; position: relative; pointer-events: none; }
         
         .standby { background: linear-gradient(135deg, #0b0e14, #040508); color: #ffffff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; flex-direction: column; }
         .logo { font-size: 48px; font-weight: 800; letter-spacing: 6px; color: #00d2ff; text-shadow: 0 0 25px rgba(0, 210, 255, 0.6); margin-bottom: 8px; }
@@ -25,53 +25,55 @@
     </div>
     <div id="playerContainer" class="full-screen" style="display: none;">
         <div id="player-wrapper">
-            <!-- El video HTML5 se inyectará aquí -->
+            <div id="youtube-player"></div>
         </div>
     </div>
 
+    <!-- API Oficial de YouTube -->
+    <script src="https://www.youtube.com/iframe_api"></script>
     <script>
-        let localPlayer = null;
-        let currentVolume = 1.0; // En HTML5 el volumen va de 0.0 a 1.0
+        let player;
+        let pendingVideoId = null;
+        let pendingStartSeconds = 0;
 
-        async function loadAdFreeVideo(videoId, startSeconds = 0) {
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('youtube-player', {
+                height: '100%',
+                width: '100%',
+                playerVars: {
+                    'autoplay': 1,
+                    'controls': 0,
+                    'disablekb': 1,
+                    'fs': 0,
+                    'iv_load_policy': 3,
+                    'modestbranding': 1,
+                    'rel': 0
+                },
+                events: {
+                    'onReady': onPlayerReady
+                }
+            });
+        }
+
+        function onPlayerReady(event) {
+            if (pendingVideoId) {
+                player.loadVideoById({videoId: pendingVideoId, startSeconds: pendingStartSeconds});
+                pendingVideoId = null;
+            }
+        }
+
+        function playYouTubeVideo(videoId, startSeconds = 0) {
             const standbyScreen = document.getElementById('standbyScreen');
             const playerContainer = document.getElementById('playerContainer');
-            const wrapper = document.getElementById('player-wrapper');
 
             standbyScreen.style.display = 'none';
             playerContainer.style.display = 'block';
 
-            try {
-                // Usar la API de Yewtu.be (instancia Invidious) para sacar el MP4 directo
-                const response = await fetch(`https://yewtu.be/api/v1/videos/${videoId}`);
-                const data = await response.json();
-                
-                let streamUrl = "";
-                // Extraemos la primera URL de stream (MP4) válida
-                if (data.formatStreams && data.formatStreams.length > 0) {
-                    streamUrl = data.formatStreams[0].url;
-                } else {
-                    throw new Error("No se encontraron streams válidos");
-                }
-
-                wrapper.innerHTML = `<video id="htmlPlayer" style="width: 100vw; height: 100vh; object-fit: cover; transform: scale(1.05);"></video>`;
-                localPlayer = document.getElementById('htmlPlayer');
-                
-                localPlayer.src = streamUrl;
-                localPlayer.currentTime = startSeconds;
-                localPlayer.volume = currentVolume;
-                
-                // Si el video termina, volver a Standby
-                localPlayer.onended = () => { showStandby(); };
-                
-                // Forzar reproducción
-                let playPromise = localPlayer.play();
-                if (playPromise !== undefined) {
-                    playPromise.catch(e => console.log("Reproducción automática bloqueada:", e));
-                }
-            } catch (error) {
-                console.error("Error cargando video sin anuncios:", error);
-                showStandby();
+            if (player && typeof player.loadVideoById === 'function') {
+                player.loadVideoById({videoId: videoId, startSeconds: startSeconds});
+            } else {
+                pendingVideoId = videoId;
+                pendingStartSeconds = startSeconds;
             }
         }
 
@@ -79,11 +81,8 @@
             const standbyScreen = document.getElementById('standbyScreen');
             const playerContainer = document.getElementById('playerContainer');
             
-            if (localPlayer) {
-                localPlayer.pause();
-                localPlayer.removeAttribute('src');
-                localPlayer.load();
-                localPlayer = null;
+            if (player && typeof player.stopVideo === 'function') {
+                player.stopVideo();
             }
             
             playerContainer.style.display = 'none';
@@ -95,17 +94,21 @@
             if (!data) return;
 
             if (data.type === "loadVideo") {
-                loadAdFreeVideo(data.videoId, data.startSeconds);
+                playYouTubeVideo(data.videoId, data.startSeconds);
             } else if (data.type === "standby") {
                 showStandby();
             } else if (data.type === "setVolume") {
-                // Convertir de 0-100 (FiveM) a 0.0-1.0 (HTML5)
-                currentVolume = (Number(data.volume) || 0) / 100;
-                if (localPlayer) localPlayer.volume = currentVolume;
+                if (player && typeof player.setVolume === 'function') {
+                    player.setVolume(Number(data.volume) || 0);
+                }
             } else if (data.type === "pause") {
-                if (localPlayer) {
-                    if (localPlayer.paused) localPlayer.play();
-                    else localPlayer.pause();
+                if (player && typeof player.getPlayerState === 'function') {
+                    let state = player.getPlayerState();
+                    if (state === YT.PlayerState.PLAYING) {
+                        player.pauseVideo();
+                    } else {
+                        player.playVideo();
+                    }
                 }
             }
         });
